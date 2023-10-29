@@ -1,0 +1,1 @@
+# LUCCDC Competition Scripts
