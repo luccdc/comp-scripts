@@ -1,8 +1,9 @@
 #!/usr/bin/env perl
-my $a = {
-    a => 1,
-    b => 2,
-    c => 3,
-};
-print %{$a}{a};
+
+use strict;
+use warnings;
+use LUCCDC::Stig::SSH qw(check_sshd_config);
+
+
+check_sshd_config("./test-config");
 
