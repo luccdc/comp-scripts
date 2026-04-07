@@ -166,12 +166,16 @@ MACHINE\System\CurrentControlSet\Services\LanmanServer\Parameters\RequireSecurit
 $SecPolContent | Out-File -FilePath $SecPolInf -Encoding Unicode
 
 # Apply the template using secedit
-secedit /configure /db $SecPolDb /cfg $SecPolInf /areas SECURITYPOLICY /quiet
+secedit /configure /db "$SecPolDb" /cfg "$SecPolInf" /quiet
 if ($LASTEXITCODE -eq 0) {
     Write-Log "Security policies applied successfully."
 } else {
     Write-Log "WARNING: Security policies applied with warnings or errors. Check Windows Event Logs."
 }
+
+# Force a Group Policy update to refresh settings
+Write-Log "Refreshing Group Policy..."
+gpupdate /force /wait:0
 
 # Cleanup temp files
 Remove-Item -Path $SecPolInf -Force -ErrorAction SilentlyContinue
