@@ -10,6 +10,15 @@
     Author: Gemini CLI
 #>
 
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$false)]
+    [switch]$DisableRDP,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$InstallGeminiCLI
+)
+
 #Requires -RunAsAdministrator
 
 # Explicit check for Administrator privileges
@@ -111,6 +120,18 @@ AuditAccountManage = 3
 AuditProcessTracking = 2
 AuditDSAccess = 2
 AuditAccountLogon = 3
+[Privilege Rights]
+SeShutdownPrivilege = *S-1-5-32-544
+SeSystemtimePrivilege = *S-1-5-32-544, *S-1-5-19
+SeNetworkLogonRight = *S-1-5-32-544, *S-1-5-32-545
+SeRemoteInteractiveLogonRight = *S-1-5-32-544
+[Registry Values]
+MACHINE\System\CurrentControlSet\Control\Lsa\RunAsPPL=4,1
+MACHINE\System\CurrentControlSet\Control\Lsa\NoLMHash=4,1
+MACHINE\System\CurrentControlSet\Control\Lsa\DisableDomainCreds=4,1
+MACHINE\System\CurrentControlSet\Control\Lsa\EveryoneIncludesAnonymous=4,0
+MACHINE\System\CurrentControlSet\Control\Lsa\LimitBlankPasswordUse=4,1
+MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\AutoAdminLogon=4,0
 "@
 
 $SecPolContent | Out-File -FilePath $SecPolInf -Encoding Unicode
@@ -264,6 +285,62 @@ Write-Artifact "Active Non-Default Local Users" $ActiveUsers
 
 $LocalAdmins = Get-LocalGroupMember -Group "Administrators" | Select-Object Name, PrincipalSource
 Write-Artifact "Members of Local Administrators Group" $LocalAdmins
+
+# ====================================================================
+# 6. SMB Hardening (with Backup)
+# ====================================================================
+Write-Log "Configuring SMB Hardening..."
+$SMBBackup = Join-Path $LogDir "SMB_Config_Backup_$(Get-Date -Format 'yyyyMMdd_HHmmss').xml"
+try {
+    Get-SmbServerConfiguration | Export-CliXml -Path $SMBBackup
+    Write-Log "SMB Configuration backed up to $SMBBackup"
+
+    # Hardening Steps
+    Set-SmbServerConfiguration -RequireMessageSigning $true -Force
+    Set-SmbServerConfiguration -EncryptData $true -Force
+    
+    # Disable SMBv1
+    if (Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol | Where-Object { $_.State -eq 'Enabled' }) {
+        Write-Log "Disabling SMBv1 Protocol..."
+        Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart
+    } else {
+        Write-Log "SMBv1 is already disabled or not present."
+    }
+    Write-Log "SMB hardening applied successfully."
+} catch {
+    Write-Log "WARNING: Failed to apply some SMB hardening settings: $_"
+}
+
+# ====================================================================
+# 7. Remote Desktop Management
+# ====================================================================
+if ($DisableRDP) {
+    Write-Log "Disabling Remote Desktop (RDP)..."
+    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1
+    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+    
+    # Disable Firewall Rules
+    Get-NetFirewallRule -DisplayGroup "Remote Desktop" | Disable-NetFirewallRule
+    Write-Log "RDP has been disabled and firewall rules closed."
+}
+
+# ====================================================================
+# 8. Install Gemini CLI
+# ====================================================================
+if ($InstallGeminiCLI) {
+    Write-Log "Attempting to install Gemini CLI..."
+    if (Get-Command npm -ErrorAction SilentlyContinue) {
+        Write-Log "Found npm. Running global installation..."
+        npm install -g @google/gemini-cli
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "Gemini CLI installed successfully."
+        } else {
+            Write-Log "WARNING: npm install returned a non-zero exit code."
+        }
+    } else {
+        Write-Log "WARNING: Node.js/npm not found. Please install Node.js first to use Gemini CLI."
+    }
+}
 
 Write-Log "Suspicious artifacts report generated at: $ArtifactReport"
 
