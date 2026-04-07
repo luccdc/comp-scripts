@@ -87,6 +87,18 @@ if ($BuiltInGuest) {
 }
 
 # ====================================================================
+# 2.5. Windows Update Service
+# ====================================================================
+Write-Log "Configuring Windows Update service..."
+try {
+    Set-Service -Name wuauserv -StartupType Automatic -ErrorAction Stop
+    Start-Service -Name wuauserv -ErrorAction SilentlyContinue
+    Write-Log "Windows Update service set to Automatic and started."
+} catch {
+    Write-Log "WARNING: Failed to configure Windows Update service: $_"
+}
+
+# ====================================================================
 # 3. Apply Security Policies (Password, Lockout, Auditing)
 # ====================================================================
 Write-Log "Configuring Password, Account Lockout, and Audit Policies..."
@@ -113,12 +125,12 @@ ClearTextPassword = 0
 [Event Audit]
 AuditSystemEvents = 3
 AuditLogonEvents = 3
-AuditObjectAccess = 2
-AuditPrivilegeUse = 2
+AuditObjectAccess = 3
+AuditPrivilegeUse = 3
 AuditPolicyChange = 3
 AuditAccountManage = 3
-AuditProcessTracking = 2
-AuditDSAccess = 2
+AuditProcessTracking = 3
+AuditDSAccess = 3
 AuditAccountLogon = 3
 [Privilege Rights]
 SeShutdownPrivilege = *S-1-5-32-544
@@ -131,7 +143,24 @@ MACHINE\System\CurrentControlSet\Control\Lsa\NoLMHash=4,1
 MACHINE\System\CurrentControlSet\Control\Lsa\DisableDomainCreds=4,1
 MACHINE\System\CurrentControlSet\Control\Lsa\EveryoneIncludesAnonymous=4,0
 MACHINE\System\CurrentControlSet\Control\Lsa\LimitBlankPasswordUse=4,1
+MACHINE\System\CurrentControlSet\Control\Lsa\RestrictAnonymous=4,1
+MACHINE\System\CurrentControlSet\Control\Lsa\RestrictAnonymousSAM=4,1
+MACHINE\System\CurrentControlSet\Control\Lsa\ForceGuest=4,0
+MACHINE\System\CurrentControlSet\Control\Lsa\SubmitControl=4,0
+MACHINE\System\CurrentControlSet\Control\Lsa\AuditBaseObjects=4,1
+MACHINE\System\CurrentControlSet\Control\Lsa\FullPrivilegeAuditing=4,1
 MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\AutoAdminLogon=4,0
+MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableCAD=4,0
+MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\DontDisplayLastUserName=4,1
+MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\ConsentPromptBehaviorAdmin=4,2
+MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\ConsentPromptBehaviorUser=4,3
+MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\EnableLUA=4,1
+MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\PromptOnSecureDesktop=4,1
+MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\InactivityTimeoutSecs=4,900
+MACHINE\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\EnableSecuritySignature=4,1
+MACHINE\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\RequireSecuritySignature=4,1
+MACHINE\System\CurrentControlSet\Services\LanmanServer\Parameters\EnableSecuritySignature=4,1
+MACHINE\System\CurrentControlSet\Services\LanmanServer\Parameters\RequireSecuritySignature=4,1
 "@
 
 $SecPolContent | Out-File -FilePath $SecPolInf -Encoding Unicode
