@@ -106,10 +106,17 @@ Write-Log "Configuring Password, Account Lockout, and Audit Policies..."
 $SecPolInf = "$env:TEMP\secpol_update.inf"
 $SecPolDb = "$env:TEMP\secpol_update.sdb"
 
+# Apply Password Policies using 'net accounts' first for better reliability in secpol.msc
+Write-Log "  -> Setting Password Policies via net accounts..."
+net accounts /minpwlen:14 /maxpwage:30 /minpwage:1 /uniquepw:24 /force
+
 # 0 = No auditing, 1 = Success, 2 = Failure, 3 = Success and Failure
 $SecPolContent = @"
 [Unicode]
 Unicode=yes
+[Version]
+signature="`$CHICAGO$"
+Revision=1
 [System Access]
 MinimumPasswordAge = 1
 MaximumPasswordAge = 30
@@ -161,6 +168,7 @@ MACHINE\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\EnableSec
 MACHINE\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\RequireSecuritySignature=4,1
 MACHINE\System\CurrentControlSet\Services\LanmanServer\Parameters\EnableSecuritySignature=4,1
 MACHINE\System\CurrentControlSet\Services\LanmanServer\Parameters\RequireSecuritySignature=4,1
+MACHINE\System\CurrentControlSet\Services\LanmanServer\Parameters\EncryptData=4,1
 "@
 
 $SecPolContent | Out-File -FilePath $SecPolInf -Encoding Unicode
@@ -328,9 +336,9 @@ try {
     Get-SmbServerConfiguration | Export-CliXml -Path $SMBBackup
     Write-Log "SMB Configuration backed up to $SMBBackup"
 
-    # Hardening Steps
-    Set-SmbServerConfiguration -RequireMessageSigning $true -Force
-    Set-SmbServerConfiguration -EncryptData $true -Force
+    # Hardening Steps (Registry-based via secedit in Section 3)
+    # 1. Require Message Signing (Server and Client)
+    # 2. Encrypt Data (Server)
     
     # Disable SMBv1
     if (Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol | Where-Object { $_.State -eq 'Enabled' }) {
@@ -372,6 +380,59 @@ if ($InstallGeminiCLI) {
         }
     } else {
         Write-Log "WARNING: Node.js/npm not found. Please install Node.js first to use Gemini CLI."
+    }
+}
+
+# ====================================================================
+# 9. Report Configured Group Policies
+# ====================================================================
+Write-Log "Reporting configured Group Policy settings (excluding 'Not Configured')..."
+
+# 9.1 Security Policies (secpol.msc / Security Settings)
+# We use the backup created in Section 1
+if (Test-Path $BackupPath) {
+    Write-Log "--- Configured Security Policies ---"
+    Get-Content $BackupPath | Where-Object { 
+        $_ -match '=' -and 
+        $_ -notmatch '^\[Version\]' -and 
+        $_ -notmatch '^signature=' -and 
+        $_ -notmatch '^Revision=' 
+    } | ForEach-Object {
+        Write-Log "  [Security] $_"
+    }
+}
+
+# 9.2 Administrative Templates (Registry-based Policies)
+Write-Log "--- Configured Administrative Templates (Registry) ---"
+$PolicyRegistryPaths = @(
+    "HKLM:\SOFTWARE\Policies",
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies",
+    "HKCU:\SOFTWARE\Policies",
+    "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies"
+)
+
+foreach ($path in $PolicyRegistryPaths) {
+    if (Test-Path $path) {
+        # Check root properties first
+        $rootProps = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue
+        if ($rootProps) {
+            foreach ($prop in $rootProps.PSObject.Properties) {
+                if ($prop.Name -notin @("PSPath", "PSParentPath", "PSChildName", "PSDrive", "PSProvider")) {
+                    Write-Log "  [Registry] $path\$($prop.Name) = $($prop.Value)"
+                }
+            }
+        }
+        
+        # Check subkeys
+        Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            $subKeyPath = $_.PSPath
+            $properties = Get-ItemProperty -Path $subKeyPath -ErrorAction SilentlyContinue
+            foreach ($prop in $properties.PSObject.Properties) {
+                if ($prop.Name -notin @("PSPath", "PSParentPath", "PSChildName", "PSDrive", "PSProvider")) {
+                    Write-Log "  [Registry] $($_.Name)\$($prop.Name) = $($prop.Value)"
+                }
+            }
+        }
     }
 }
 
