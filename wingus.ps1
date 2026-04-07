@@ -11,13 +11,7 @@
 #>
 
 [CmdletBinding()]
-param(
-    [Parameter(Mandatory=$false)]
-    [switch]$DisableRDP,
-
-    [Parameter(Mandatory=$false)]
-    [switch]$InstallGeminiCLI
-)
+param()
 
 #Requires -RunAsAdministrator
 
@@ -26,6 +20,13 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     Write-Warning "This script must be run as an Administrator. Please launch PowerShell as Administrator and try again."
     Exit
 }
+
+# Interactive prompts
+$DisableRDPResponse = Read-Host "Disable Remote Desktop (RDP)? [y/N]"
+$DisableRDP = $DisableRDPResponse -eq 'y' -or $DisableRDPResponse -eq 'Y'
+
+$InstallGeminiCLIResponse = Read-Host "Install Gemini CLI? [y/N]"
+$InstallGeminiCLI = $InstallGeminiCLIResponse -eq 'y' -or $InstallGeminiCLIResponse -eq 'Y'
 
 $LogDir = "C:\HardeningLogs"
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
@@ -106,10 +107,6 @@ Write-Log "Configuring Password, Account Lockout, and Audit Policies..."
 $SecPolInf = "$env:TEMP\secpol_update.inf"
 $SecPolDb = "$env:TEMP\secpol_update.sdb"
 
-# Apply Password Policies using 'net accounts' first for better reliability in secpol.msc
-Write-Log "  -> Setting Password Policies via net accounts..."
-net accounts /minpwlen:14 /maxpwage:30 /minpwage:1 /uniquepw:24 /force
-
 # 0 = No auditing, 1 = Success, 2 = Failure, 3 = Success and Failure
 $SecPolContent = @"
 [Unicode]
@@ -118,14 +115,14 @@ Unicode=yes
 signature="`$CHICAGO$"
 Revision=1
 [System Access]
-MinimumPasswordAge = 1
-MaximumPasswordAge = 30
+MinimumPasswordAge = 10
+MaximumPasswordAge = 90
 MinimumPasswordLength = 14
 PasswordComplexity = 1
 PasswordHistorySize = 24
 LockoutBadCount = 5
-ResetLockoutCount = 15
-LockoutDuration = 15
+ResetLockoutCount = 30
+LockoutDuration = 30
 RequireLogonToChangePassword = 0
 ForceLogoffWhenHourExpire = 0
 ClearTextPassword = 0
