@@ -1,3 +1,3 @@
 #!/bin/sh
 
-systemctl --type=service,socket,timer | cat
+systemctl --type=service,socket,timer | cat | tr -d '\r'

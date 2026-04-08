@@ -1,3 +1,3 @@
 #!/bin/sh
 
-aa-status
+aa-status | tr -d '\r'

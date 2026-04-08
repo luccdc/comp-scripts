@@ -1,3 +1,3 @@
 #!/bin/sh
 
-ps -eo comm
+ps -eo comm | tr -d '\r'
