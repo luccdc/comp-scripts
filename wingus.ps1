@@ -199,21 +199,27 @@ Remove-Item -Path $SecPolDb -Force -ErrorAction SilentlyContinue
 # 4. Identify Media Files
 # ====================================================================
 $MediaExtensions = @("*.mp3", "*.mp4", "*.avi", "*.mov", "*.mkv", "*.wav", "*.jpg", "*.jpeg", "*.png", "*.gif")
-# Focusing on C:\Users as searching the entire C:\ drive includes many standard Windows system media files.
-$SearchPath = "C:\Users" 
+# Searching entire C: drive but excluding Windows and Program Files to avoid system noise
+$SearchPath = "C:\" 
+$ExcludeDirs = @("C:\Windows", "C:\Program Files", "C:\Program Files (x86)")
 $MediaReport = Join-Path $LogDir "Media_Files_Report_$(Get-Date -Format 'yyyyMMdd_HHmmss').csv"
 
-Write-Log "Scanning for media files in $SearchPath (Extensions: $($MediaExtensions -join ', '))..."
+Write-Log "Scanning for media files on $SearchPath (Extensions: $($MediaExtensions -join ', '))..."
 
-# Using ErrorAction SilentlyContinue to gracefully handle 'Access Denied' on restricted folders (like ntuser.dat etc.)
-$FoundMedia = Get-ChildItem -Path $SearchPath -Include $MediaExtensions -Recurse -File -ErrorAction SilentlyContinue |
+# Using -Force to see hidden files/folders (like C:\aeacus)
+$FoundMedia = Get-ChildItem -Path $SearchPath -Include $MediaExtensions -Recurse -File -Force -ErrorAction SilentlyContinue |
+              Where-Object { 
+                $InExcludedDir = $false
+                foreach ($Dir in $ExcludeDirs) { if ($_.FullName.StartsWith($Dir, "OrdinalIgnoreCase")) { $InExcludedDir = $true; break } }
+                -not $InExcludedDir
+              } |
               Select-Object FullName, Extension, @{Name="Size(MB)";Expression={[math]::Round($_.Length / 1MB, 2)}}, LastWriteTime
 
 if ($FoundMedia) {
     Write-Log "Found $($FoundMedia.Count) media files. Exporting report to $MediaReport"
     $FoundMedia | Export-Csv -Path $MediaReport -NoTypeInformation
 } else {
-    Write-Log "No media files found in $SearchPath."
+    Write-Log "No media files found on $SearchPath outside of excluded system directories."
 }
 
 # ====================================================================
