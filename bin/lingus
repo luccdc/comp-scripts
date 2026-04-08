@@ -38,5 +38,8 @@ sub print_hash {
 }
 
 my $sus = list_sus_files();
+my $systemd = list_systemd();
+
+print_hash($systemd);
 
 print_hash($sus);
