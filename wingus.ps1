@@ -182,6 +182,15 @@ if ($LASTEXITCODE -eq 0) {
 Write-Log "Refreshing Group Policy..."
 gpupdate /force /wait:0
 
+# Configure Advanced Auditing
+Write-Log "Configuring Advanced Auditing (Success and Failure for all categories)..."
+auditpol /set /category:"*" /success:enable /failure:enable | Out-Null
+if ($LASTEXITCODE -eq 0) {
+    Write-Log "Advanced auditing policies applied successfully."
+} else {
+    Write-Log "WARNING: Failed to apply some advanced auditing policies."
+}
+
 # Cleanup temp files
 Remove-Item -Path $SecPolInf -Force -ErrorAction SilentlyContinue
 Remove-Item -Path $SecPolDb -Force -ErrorAction SilentlyContinue
