@@ -436,96 +436,39 @@ foreach ($path in $PolicyRegistryPaths) {
 Write-Log "Suspicious artifacts report generated at: `$ArtifactReport"
 
 # ====================================================================
-# 10. CCDC Specific Hardening (from scoring.conf)
+# 10. General System Hardening (Adapted from baseline)
 # ====================================================================
-Write-Log "Applying CCDC specific hardening from scoring.conf..."
+Write-Log "Applying general system hardening rules..."
 
-# 1, 25, 41, 42, 44, 77: Forensic Questions
-$DesktopPath = "C:\Users\Doug Rattmann\Desktop"
-if (!(Test-Path $DesktopPath)) { New-Item -ItemType Directory -Path $DesktopPath -Force | Out-Null }
-Set-Content -Path "$DesktopPath\Forensic Question 1.txt" -Value "ANSWER: Make Rattmann admin for moon base"
-Set-Content -Path "$DesktopPath\Forensic Question 2.txt" -Value "ANSWER: iwannagotospace"
-Set-Content -Path "$DesktopPath\Forensic Question 3.txt" -Value "ANSWER: S-1-5-21-3137454240-987807498-1586498154-500`r`nANSWER: Administrator"
-Set-Content -Path "$DesktopPath\Forensic Question 4.txt" -Value "ANSWER: naruto"
-Set-Content -Path "$DesktopPath\Forensic Question 5.txt" -Value "ANSWER: b133e1a24617e8b32fb0694741ddfeabf789b4a7bab01bb0023ab7ed40153c8f"
-Set-Content -Path "$DesktopPath\Forensic Question 6.txt" -Value "ANSWER: Walter Bennett"
-
-# 2, 35: Firewall
+# Firewall Base Rules
 Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True -ErrorAction SilentlyContinue
 Set-NetFirewallProfile -Profile Public -DefaultInboundAction Block -ErrorAction SilentlyContinue
+Get-NetFirewallRule -DisplayGroup "Network Discovery" | Disable-NetFirewallRule -ErrorAction SilentlyContinue
 
-# 3, 49, 50, 51, 54, 55: Unauthorized Software
-$UnauthorizedPaths = @(
-    "C:\Program Files\Internet Explorer",
-    "C:\Users\Grigori\Saved Games\Super Mario 64",
-    "C:\HideUL",
-    "C:\Users\Doug Rattmann\AppData\Roaming\Discord",
-    "C:\Users\Doug Rattmann\Desktop\Minesweeper.exe",
-    "C:\Users\Eli Vance\Music\Bust.mp3",
-    "C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.23080.2006-0\MpBypasser.dll",
-    "C:\Windows\System32\drivers\WinDivert64.sys",
-    "C:\Users\Doug Rattmann\AppData\Roaming\Microsoft\Windows\Templates\Update Service Handler.exe",
-    "C:\Windows\SystemResources\¢◎₥฿Ꭵ₦Ꮛ.ps1"
-)
-foreach ($Path in $UnauthorizedPaths) {
-    if (Test-Path $Path) { Remove-Item -Path $Path -Recurse -Force -ErrorAction SilentlyContinue }
-}
-# Bonxo
-if (Test-Path "C:\Users\Doug Rattmann\AppData\Local\Apps\2.0") {
-    Get-ChildItem -Path "C:\Users\Doug Rattmann\AppData\Local\Apps\2.0" -Recurse -Filter "*bonx*" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-}
-
-# Uninstall via WMI
-$UninstallApps = @("360安全卫士", "AnyDesk", "CCleaner", "Notepad++")
+# Uninstall Commonly Unauthorized/Risky Software
+$UninstallApps = @("360安全卫士", "AnyDesk", "CCleaner")
 foreach ($App in $UninstallApps) {
     Get-CimInstance -Class Win32_Product -Filter "Name like '%$App%'" -ErrorAction SilentlyContinue | Invoke-CimMethod -MethodName Uninstall -ErrorAction SilentlyContinue
 }
 
-# 4, 79, 80: Permissions
-if (Test-Path "C:\Users\Gordon Freeman") {
-    $Acl = Get-Acl "C:\Users\Gordon Freeman"
-    $Rule = New-Object System.Security.AccessControl.FileSystemAccessRule("GlaDOS", "Read", "ContainerInherit,ObjectInherit", "None", "Deny")
-    $Acl.AddAccessRule($Rule)
-    Set-Acl "C:\Users\Gordon Freeman" $Acl -ErrorAction SilentlyContinue
+# Remove General Known Malware Paths
+$GeneralMalwarePaths = @(
+    "C:\HideUL",
+    "C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.23080.2006-0\MpBypasser.dll",
+    "C:\Windows\System32\drivers\WinDivert64.sys",
+    "C:\Windows\SystemResources\¢◎₥฿Ꭵ₦Ꮛ.ps1"
+)
+foreach ($Path in $GeneralMalwarePaths) {
+    if (Test-Path $Path) { Remove-Item -Path $Path -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-if (!(Test-Path "C:\ftp")) { New-Item -ItemType Directory -Path "C:\ftp" -Force | Out-Null }
-$AclFtp = Get-Acl "C:\ftp"
-$RuleFtp = New-Object System.Security.AccessControl.FileSystemAccessRule("ftpusers", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
-$AclFtp.AddAccessRule($RuleFtp)
-Set-Acl "C:\ftp" $AclFtp -ErrorAction SilentlyContinue
-
-if (!(Test-Path "C:\ftp\aperture-moon")) { New-Item -ItemType Directory -Path "C:\ftp\aperture-moon" -Force | Out-Null }
-$AclAperture = Get-Acl "C:\ftp\aperture-moon"
-$RuleAp1 = New-Object System.Security.AccessControl.FileSystemAccessRule("Authenticated Users", "Read", "ContainerInherit,ObjectInherit", "None", "Allow")
-$RuleAp2 = New-Object System.Security.AccessControl.FileSystemAccessRule("Authenticated Users", "Write", "ContainerInherit,ObjectInherit", "None", "Deny")
-$AclAperture.AddAccessRule($RuleAp1)
-$AclAperture.AddAccessRule($RuleAp2)
-Set-Acl "C:\ftp\aperture-moon" $AclAperture -ErrorAction SilentlyContinue
-
-# 6, 7, 26: Firefox
-$FirefoxProfiles = Get-ChildItem "C:\Users\Doug Rattmann\AppData\Roaming\Mozilla\Firefox\Profiles" -Directory -ErrorAction SilentlyContinue
-foreach ($Profile in $FirefoxProfiles) {
-    $PrefsFile = "$($Profile.FullName)\prefs.js"
-    if (Test-Path $PrefsFile) {
-        $Content = Get-Content $PrefsFile -ErrorAction SilentlyContinue
-        $Content = $Content -replace 'user_pref\("dom\.disable_open_during_load", false\);', ''
-        $Content = $Content -replace 'user_pref\("browser\.safebrowsing\.phishing\.enabled",\s*false\);', 'user_pref("browser.safebrowsing.phishing.enabled", true);'
-        if ($Content -notmatch 'user_pref\("identity\.fxaccounts\.enabled"') {
-            $Content += "`r`nuser_pref(`"identity.fxaccounts.enabled`", false);"
-        }
-        Set-Content $PrefsFile $Content -ErrorAction SilentlyContinue
-    }
-}
-
-# 20, 23, 27-34, 43, 52, 53, 65, 68, 72: Registry
+# General Registry Hardening
 $RegistryFixes = @(
     @{Path="HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"; Name="NoConnectedUser"; Value=3; Type="DWord"},
     @{Path="HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl"; Name="CrashDumpEnabled"; Value=0; Type="DWord"},
     @{Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint"; Name="RestrictDriverInstallationToAdministrators"; Value=1; Type="DWord"},
     @{Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"; Name="EnableSmartScreen"; Value=1; Type="DWord"},
     @{Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"; Name="ShellSmartScreenLevel"; Value="Block"; Type="String"},
-    @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers"; Name="DisableAutoplay"; Value=1; Type="DWord"},
     @{Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"; Name="DisableLockScreenAppNotifications"; Value=1; Type="DWord"},
     @{Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"; Name="NoAutoUpdate"; Value=0; Type="DWord"},
     @{Path="HKLM:\Software\Policies\Microsoft\WindowsStore"; Name="RemoveWindowsStore"; Value=1; Type="DWord"},
@@ -540,119 +483,28 @@ foreach ($Fix in $RegistryFixes) {
 }
 
 Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Advanced Threat Protection" -Name "ForceDefenderPassiveMode" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "DisplayVersion" -ErrorAction SilentlyContinue
 
-# 36: Bitlocker
+# Disable Autoplay for current user
+if (!(Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers")) {
+    New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Force -ErrorAction SilentlyContinue | Out-Null
+}
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name "DisableAutoplay" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+
+# Apply Bitlocker if capable
 Enable-BitLocker -MountPoint "C:" -UsedSpaceOnly -SkipHardwareTest -RecoveryPasswordProtector -ErrorAction SilentlyContinue
 
-# 38, 40: Passwords
-$Gordon = Get-LocalUser -Name "Gordon Freeman" -ErrorAction SilentlyContinue
-if ($Gordon) { Set-LocalUser -Name "Gordon Freeman" -Password (ConvertTo-SecureString "Aperture!Secure123" -AsPlainText -Force) -ErrorAction SilentlyContinue }
-$Cave = Get-LocalUser -Name "Cave Johnson" -ErrorAction SilentlyContinue
-if ($Cave) { Set-LocalUser -Name "Cave Johnson" -PasswordNeverExpires $false -ErrorAction SilentlyContinue }
-
-# 39: Remove task memez
-Unregister-ScheduledTask -TaskName "memez" -Confirm:$false -ErrorAction SilentlyContinue
-
-# 58, 60, 75, 78, 101: Users and Groups
-$UsersToRemove = @("Walter Bennett", "Rick")
-foreach ($User in $UsersToRemove) {
-    if (Get-LocalUser -Name $User -ErrorAction SilentlyContinue) { Remove-LocalUser -Name $User -ErrorAction SilentlyContinue }
-}
-
-if (!(Get-LocalUser -Name "P-body" -ErrorAction SilentlyContinue)) {
-    New-LocalUser -Name "P-body" -Password (ConvertTo-SecureString "Aperture!Secure123" -AsPlainText -Force) -FullName "P-body" -ErrorAction SilentlyContinue
-}
-
-if (!(Get-LocalGroup -Name "ftpusers" -ErrorAction SilentlyContinue)) {
-    New-LocalGroup -Name "ftpusers" -Description "FTP Users Group" -ErrorAction SilentlyContinue
-}
-
-$FtpUsersMembers = @("Cave Johnson", "P-body", "Doug Rattmann", "GlaDOS")
-foreach ($Member in $FtpUsersMembers) {
-    if (Get-LocalUser -Name $Member -ErrorAction SilentlyContinue) {
-        Add-LocalGroupMember -Group "ftpusers" -Member $Member -ErrorAction SilentlyContinue
-    }
-}
-
-if (Get-LocalUser -Name "Doug Rattmann" -ErrorAction SilentlyContinue) {
-    Add-LocalGroupMember -Group "Administrators" -Member "Doug Rattmann" -ErrorAction SilentlyContinue
-}
-
-$RdpMembers = @("Atlas", "Gordon Freeman")
-foreach ($Member in $RdpMembers) {
-    if (Get-LocalUser -Name $Member -ErrorAction SilentlyContinue) {
-        Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Member -ErrorAction SilentlyContinue
-    }
-}
-Remove-LocalGroupMember -Group "Remote Desktop Users" -Member "Barney Calhoun" -ErrorAction SilentlyContinue
-
-# 61, 62, 94, 95: Services
-$ServicesToStart = @("wuauserv", "WaaSMedicSvc", "EventLog", "sshd", "filezilla-server")
+# Ensure Core Services are running
+$ServicesToStart = @("wuauserv", "WaaSMedicSvc", "EventLog")
 foreach ($Svc in $ServicesToStart) {
     Set-Service -Name $Svc -StartupType Automatic -ErrorAction SilentlyContinue
     Start-Service -Name $Svc -ErrorAction SilentlyContinue
 }
 
-# 63, 82, 83, 84: FileZilla
-$FzSettings = "C:\ftp\config\settings.xml"
-if (Test-Path $FzSettings) {
-    $Content = Get-Content $FzSettings -ErrorAction SilentlyContinue
-    $Content = $Content -replace 'The password for FTP administrators is 88zP\[!6tEpr@', 'Welcome to FTP'
-    $Content = $Content -replace '<tls_mode>\d+</tls_mode>', '<tls_mode>2</tls_mode>'
-    $Content = $Content -replace '<frequency>0</frequency>', '<frequency>1</frequency>'
-    Set-Content $FzSettings $Content -ErrorAction SilentlyContinue
-}
-$FzUsers = "C:\ftp\config\users.xml"
-if (Test-Path $FzUsers) {
-    $Content = Get-Content $FzUsers -ErrorAction SilentlyContinue
-    $Content = $Content -replace '(?s)<user name="FTP Admin".*?</user>', ''
-    Set-Content $FzUsers $Content -ErrorAction SilentlyContinue
-}
-
-# 64: TelnetClient
+# Remove Insecure Windows Features
 Disable-WindowsOptionalFeature -Online -FeatureName TelnetClient -NoRestart -ErrorAction SilentlyContinue
 
-# 74: Shares
-Remove-SmbShare -Name "A҉_҉G҉I҉F҉T҉" -Force -ErrorAction SilentlyContinue
-
-# 85-89: SSH
-$SshConfig = "C:\ProgramData\ssh\sshd_config"
-if (Test-Path $SshConfig) {
-    $Content = Get-Content $SshConfig -ErrorAction SilentlyContinue
-    $Content = $Content -replace '(?m)^#?IgnoreRhosts.*', 'IgnoreRhosts yes'
-    $Content = $Content -replace '(?m)^#?PermitEmptyPasswords.*', 'PermitEmptyPasswords no'
-    $Content = $Content -replace '(?m)^#?Port.*', 'Port 2319'
-    $Content = $Content -replace '(?m)^#?PasswordAuthentication.*', 'PasswordAuthentication no'
-    if ($Content -notmatch 'DenyUsers Chell') {
-        $Content += "`r`nDenyUsers Chell"
-    }
-    Set-Content $SshConfig $Content -ErrorAction SilentlyContinue
-    Restart-Service sshd -ErrorAction SilentlyContinue
-}
-
-# 90, 91: PuTTY
-if (!(Test-Path "HKCU:\Software\SimonTatham\PuTTY\Sessions\Default%20Settings")) {
-    New-Item -Path "HKCU:\Software\SimonTatham\PuTTY\Sessions\Default%20Settings" -Force -ErrorAction SilentlyContinue | Out-Null
-}
-Set-ItemProperty -Path "HKCU:\Software\SimonTatham\PuTTY\Sessions\Default%20Settings" -Name "SshProt" -Value 3 -Type DWord -ErrorAction SilentlyContinue
-Set-ItemProperty -Path "HKCU:\Software\SimonTatham\PuTTY\Sessions\Default%20Settings" -Name "SSHLogOmitPasswords" -Value 1 -Type DWord -ErrorAction SilentlyContinue
-
-# 93: VLC
-$Vlcrc = "C:\Users\Doug Rattmann\AppData\Roaming\vlc\vlcrc"
-if (Test-Path $Vlcrc) {
-    $Content = Get-Content $Vlcrc -ErrorAction SilentlyContinue
-    $Content = $Content -replace 'qt-updates-notif=0', 'qt-updates-notif=1'
-    Set-Content $Vlcrc $Content -ErrorAction SilentlyContinue
-}
-
-# 96, 97, 98: Firewall Rules
-New-NetFirewallRule -DisplayName "SSH Port 2319" -Direction Inbound -LocalPort 2319 -Protocol TCP -Action Allow -ErrorAction SilentlyContinue
-Enable-NetFirewallRule -DisplayName "FileZilla Server" -ErrorAction SilentlyContinue
-Get-NetFirewallRule -DisplayGroup "Network Discovery" | Disable-NetFirewallRule -ErrorAction SilentlyContinue
-
-# Additional SecPol edits (SecPol block didn't have these)
-$SecPolUpdateAdditions = "$env:TEMP\secpol_ccdc.inf"
+# Additional SecPol edits (General)
+$SecPolUpdateAdditions = "$env:TEMP\secpol_general.inf"
 $SecPolContentAdd = @"
 [Unicode]
 Unicode=yes
@@ -660,8 +512,6 @@ Unicode=yes
 signature="`$CHICAGO$"
 Revision=1
 [Privilege Rights]
-SeTrustedCredManAccessPrivilege = glados
-SeDenyNetworkLogonRight = Eli Vance
 SeDenyInteractiveLogonRight = *S-1-5-32-555
 [Registry Values]
 MACHINE\System\CurrentControlSet\Control\Lsa\LmCompatibilityLevel=4,5
@@ -670,7 +520,7 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\EnableVirtuali
 MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\ConsentPromptBehaviorUser=4,0
 "@
 $SecPolContentAdd | Out-File -FilePath $SecPolUpdateAdditions -Encoding Unicode
-secedit /configure /db "$env:TEMP\secpol_ccdc.sdb" /cfg "$SecPolUpdateAdditions" /quiet
+secedit /configure /db "$env:TEMP\secpol_general.sdb" /cfg "$SecPolUpdateAdditions" /quiet
 gpupdate /force /wait:0
 
 Write-Log "=== Windows Hardening Script Completed ==="
