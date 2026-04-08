@@ -2,11 +2,41 @@
 
 use strict;
 use warnings;
-#use LUCCDC::Stig::SSH qw(check_sshd_config);
-use LUCCDC::Enum qw{enum_files};
+use LUCCDC::Enum;
+
+# ANSI color codes
+my $BOLD   = "\e[1m";
+my $RED    = "\e[31m";
+my $YELLOW = "\e[33m";
+my $CYAN   = "\e[36m";
+my $RESET  = "\e[0m";
 
 
-enum_files();
+sub print_hash {
+    my ($hash_ref, $depth) = @_;
+    $depth //= 5;
 
-#check_sshd_config("./test-config");
+    for my $key (keys %$hash_ref) {
+        print $BOLD, "=" x $depth, "  $key\n", $RESET;
 
+        $hash_ref->{$key} //= '';
+
+        my $value = $hash_ref->{$key};
+        
+        if (ref $value eq 'ARRAY') {
+            print "$_\n" for @$value;
+        }
+        elsif (ref $value eq 'HASH') {
+            print_hash($value, 2+$depth);
+        }
+        else {
+            # scalar
+            print $value, "\n";
+        }
+        print "\n";   # blank line after each section
+    }
+}
+
+my $sus = list_sus_files();
+
+print_hash($sus);

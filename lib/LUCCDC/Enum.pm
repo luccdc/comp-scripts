@@ -2,24 +2,26 @@ package LUCCDC::Enum;
 
 use base qw(Exporter);
 
-our @EXPORT      = qw();
-our @EXPORT_OK   = qw(enum_packages enum_files);
+our @EXPORT      = qw(list_sus_files);
+our @EXPORT_OK   = qw(list_sus_files);
 our %EXPORT_TAGS = (
     ALL => [ @EXPORT, @EXPORT_OK ],
 );
 
 
-sub enum_packages {
+sub list_managed_files {
     my @lines=split(/\n/xms, `dpkg -V`);
 
-    my $missing = grep {/^missing \s /xms} @lines;
-    #    my $altered = grep {jfi}
+    my @missing = grep {/^missing \s /xms} @lines;
+    my @changed = grep {/^\?{2} 5 \?{6} /xms} @lines;
 
+    return \@missing, \@changed;
 }
 
-sub enum_files {
+sub list_unmanaged_files {
 
     my @excluded_dirs = (
+        "/home",
         "/sys",
         "/dev",
         "/proc",
@@ -84,11 +86,29 @@ sub enum_files {
 
     my $find_paths = "-path " . join(" -o -path ", @excluded_dirs);
 
-    my @path_packages = split(/\n/, `find / \\( $find_paths \\) -prune -o -print | xargs dpkg -S`);
-    my @invalid_paths = grep { /no path found matching pattern/xms } @path_packages;
+    my @all_paths = split(/\n/, `find / \\( $find_paths \\) -prune -o -print | sort`);
+    my @managed_paths = split(/\n/, `cat /var/lib/dpkg/info/*.list | sort`);
 
-    print join("\n", @invalid_paths);
+    my %paths_hash = map {$_ => 1} @managed_paths;
 
+    my @unmanaged_paths = grep { ! $paths_hash{$_} } @all_paths;
+    return \@unmanaged_paths;
 }
+
+sub list_sus_files {
+
+    my ($missing, $changed) = list_managed_files();
+
+    return {
+        "Writable root owned" => [ split(/\n/xms, `find /etc -type f -perm -o+w | xargs ls -ald `) ],
+        "SET\{U,G\}ID Files"  => [ split(/\n/xms, `find / -type f \\( -perm -4000 -o -perm -2000 \\) 2>/dev/null | xargs ls -ald`) ],
+        "Unmanaged Files"     => list_unmanaged_files(),
+        "Managed Files" => {
+            "Missing Files" => $missing,
+            "Changed Files" => $changed,
+        }
+    };
+}
+
 
 1;
